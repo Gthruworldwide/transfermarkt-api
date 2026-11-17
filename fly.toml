@@ -11,6 +11,8 @@ primary_region = 'ams'
 [env]
   RATE_LIMITING_ENABLE = 'true'
   RATE_LIMITING_FREQUENCY = '2/3seconds'
+  # The Fly proxy replaces any client-supplied Fly-Client-IP with the real peer address.
+  TRUST_PROXY_HEADERS = 'true'
 
 [http_service]
   internal_port = 8000

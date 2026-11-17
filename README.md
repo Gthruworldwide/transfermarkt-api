@@ -229,6 +229,7 @@ These settings configure the HTTP server and can be loaded from `.env`. SDK call
 |-------------------------------|--------------------------------------------------------------------------------------------------------|------------------------------------------|
 | `RATE_LIMITING_ENABLE`        | Enable rate limiting feature for API calls                                                             | `false`                                  |
 | `RATE_LIMITING_FREQUENCY`     | Requests allowed per client IP across all routes, in [limits notation](https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation) | `2/3seconds`                             |
+| `TRUST_PROXY_HEADERS`         | Trust `Fly-Client-IP` only behind a proxy that overwrites client-supplied copies                                               | `false`                                  |
 | `TFMKT_BASE_URL`              | Transfermarkt JSON API base URL                                                                        | Built-in upstream endpoint |
 | `TFMKT_TIMEOUT_SECONDS`       | Timeout for each upstream request                                                                      | `15`                                     |
 | `TFMKT_MAX_CONCURRENCY`       | Maximum concurrent upstream requests across the whole server                                          | `10`                                     |
@@ -237,7 +238,7 @@ These settings configure the HTTP server and can be loaded from `.env`. SDK call
 | `CACHE_MAX_ENTRIES`           | Maximum number of cached upstream responses                                                            | `2000`                                   |
 
 Rate limits apply to the API routes only: `/health`, the docs (`/`, `/docs`, `/redoc`) and `/openapi.json` are not
-counted. They are counted per client IP: the `Fly-Client-IP` header set by the Fly.io proxy, or the address of the
-connection when that header is missing. `X-Forwarded-For` is not trusted. Behind another reverse proxy, all
-requests share the proxy's address, and outside Fly.io clients can send `Fly-Client-IP` themselves, so adjust
-`client_ip` in `app/main.py` before enabling rate limiting on another host.
+counted. They are counted per client IP. The `Fly-Client-IP` header is trusted only when `TRUST_PROXY_HEADERS=true`
+and its value is a valid IP literal; otherwise the TCP peer address is used. `X-Forwarded-For` is never trusted.
+Enable `TRUST_PROXY_HEADERS` only behind a proxy that overwrites any client-supplied copy of `Fly-Client-IP` (Fly.io
+does). On any other host, leave it disabled: every request then shares the proxy's real address as one rate key.

@@ -3,7 +3,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import Tfmkt
-from app.api.params import PageNumber
+from app.api.params import PageNumber, SeasonId
 from transfermarkt_api.schemas import clubs as schemas
 from transfermarkt_api.schemas.achievements import Achievements
 from transfermarkt_api.schemas.clubs.listing import ClubListing
@@ -30,7 +30,7 @@ async def get_club_profile(club_id: str, tfmkt: Tfmkt) -> schemas.ClubProfile:
 
 
 @router.get("/{club_id}/players", response_model=schemas.ClubPlayers)
-async def get_club_players(club_id: str, tfmkt: Tfmkt, season_id: Optional[str] = None) -> schemas.ClubPlayers:
+async def get_club_players(club_id: str, tfmkt: Tfmkt, season_id: Optional[SeasonId] = None) -> schemas.ClubPlayers:
     """Get a club's squad for a season (current squad by default)."""
     return await tfmkt.club_players(club_id, season_id=season_id)
 

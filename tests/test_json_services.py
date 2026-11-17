@@ -1,5 +1,6 @@
 """Behavior of the JSON-backed endpoints: recorded upstream data plus synthetic edge cases."""
 
+import asyncio
 import json
 from collections.abc import Iterator
 from datetime import datetime
@@ -450,6 +451,28 @@ def test_page_number_below_one_is_rejected(synthetic_client: tuple[TestClient, d
     client, _ = synthetic_client
 
     assert client.get(path).status_code == 422
+
+
+@pytest.mark.parametrize("season_id", ["not-a-year", "2024x", "-1", "20 24"])
+def test_non_numeric_season_id_is_rejected(synthetic_client: tuple[TestClient, dict], season_id: str) -> None:
+    """A non-numeric season_id is refused as 422 before it can reach a bare int() conversion."""
+    client, _ = synthetic_client
+
+    assert client.get("/clubs/1/players", params={"season_id": season_id}).status_code == 422
+
+
+def test_page_number_above_upper_bound_is_rejected(synthetic_client: tuple[TestClient, dict]) -> None:
+    """Absurdly deep pages are refused instead of being forwarded upstream."""
+    client, _ = synthetic_client
+
+    assert client.get("/players/search/x?page_number=10001").status_code == 422
+
+
+def test_sdk_rejects_non_numeric_season_id() -> None:
+    """The SDK facade validates season_id before any upstream call or int() conversion."""
+    transport = httpx.MockTransport(lambda request: ok({"squad": []}))
+    with pytest.raises(ValueError, match="positive numeric string"):
+        asyncio.run(Transfermarkt(transport=transport).club_players("1", season_id="not-a-year"))
 
 
 def test_current_squad_with_non_current_members(synthetic_client: tuple[TestClient, dict]) -> None:

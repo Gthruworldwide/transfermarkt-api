@@ -28,7 +28,7 @@ build-backend = "hatchling.build"
 packages = ["transfermarkt_api"]
 
 [tool.hatch.build.targets.sdist]
-include = ["transfermarkt_api", "app", "README.md", "LICENSE", "pyproject.toml"]
+include = ["transfermarkt_api", "app", "docs", "README.md", "CHANGELOG.md", "LICENSE", "pyproject.toml"]
 
 [dependency-groups]
 dev = [
