@@ -3,12 +3,14 @@
 import hashlib
 import math
 import time
+from collections import OrderedDict
 
 from limits import parse
 from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
 
 _MAX_KEY_LENGTH = 64
+_MAX_TRACKED_KEYS = 10_000
 
 
 class RateLimiter:
@@ -20,6 +22,7 @@ class RateLimiter:
         self.enabled = enabled
         self.storage = MemoryStorage()
         self.strategy = MovingWindowRateLimiter(self.storage)
+        self._keys: OrderedDict[str, None] = OrderedDict()
 
     @staticmethod
     def _normalize_key(key: str) -> str:
@@ -28,9 +31,21 @@ class RateLimiter:
             return key
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
+    def _track(self, key: str) -> None:
+        """Bound aggregate key count by evicting the least recently used budget when full."""
+        if key in self._keys:
+            self._keys.move_to_end(key)
+            return
+        if len(self._keys) >= _MAX_TRACKED_KEYS:
+            oldest, _ = self._keys.popitem(last=False)
+            self.storage.clear(self.limit.key_for(oldest))
+        self._keys[key] = None
+
     def hit(self, key: str) -> bool:
         """Count a request from `key`; False when it is over the limit."""
-        return self.strategy.hit(self.limit, self._normalize_key(key))
+        normalized = self._normalize_key(key)
+        self._track(normalized)
+        return self.strategy.hit(self.limit, normalized)
 
     def retry_after(self, key: str) -> int:
         """Whole seconds until `key` can make another request."""
@@ -40,3 +55,4 @@ class RateLimiter:
     def reset(self) -> None:
         """Forget all counters."""
         self.storage.reset()
+        self._keys.clear()

@@ -135,3 +135,23 @@ def test_long_rate_keys_are_normalized() -> None:
     """Oversized caller keys are hashed to a bounded length before storage."""
     assert len(limiter._normalize_key("a" * 5000)) == 64
     assert limiter._normalize_key("203.0.113.7") == "203.0.113.7"
+
+
+def test_key_count_is_bounded_and_oldest_budget_evicted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unique keys cannot grow the counter store without bound; the least recently used budget is dropped."""
+    import app.rate_limit as rate_limit_module
+
+    monkeypatch.setattr(rate_limit_module, "_MAX_TRACKED_KEYS", 2)
+    bounded = rate_limit_module.RateLimiter("2/3seconds", enabled=True)
+    try:
+        assert bounded.hit("first")
+        assert bounded.hit("second")
+        assert len(bounded._keys) == 2
+
+        assert bounded.hit("third")
+        assert len(bounded._keys) == 2
+        assert "first" not in bounded._keys
+        assert bounded.hit("first")  # evicted key starts with a fresh budget
+        assert bounded.storage.events  # remaining counters are still tracked
+    finally:
+        bounded.reset()

@@ -86,10 +86,14 @@ app.include_router(api_router)
 async def sdk_error_response(request: Request, error: Exception) -> JSONResponse:
     """Translate SDK failures into the existing HTTP error contract."""
     statuses = {NotFound: 404, UpstreamBlocked: 503, UpstreamTimeout: 504, UpstreamError: 502, EndpointUnavailable: 501}
-    return JSONResponse(
-        {"detail": str(error)},
-        status_code=next(status for error_type, status in statuses.items() if isinstance(error, error_type)),
-    )
+    status = next(status for error_type, status in statuses.items() if isinstance(error, error_type))
+    if isinstance(error, UpstreamError):
+        # Keep upstream-derived diagnostics server-side; the public 502 body stays fixed.
+        access_log.warning("Upstream request failed: %s", _log_safe(str(error)))
+        detail = "Upstream request failed"
+    else:
+        detail = str(error)
+    return JSONResponse({"detail": detail}, status_code=status)
 
 
 for error_type in (NotFound, UpstreamBlocked, UpstreamTimeout, UpstreamError, EndpointUnavailable):

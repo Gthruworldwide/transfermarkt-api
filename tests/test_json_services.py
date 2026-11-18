@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from collections.abc import Iterator
 from datetime import datetime
 
@@ -371,7 +372,22 @@ def test_country_listing_rejects_malformed_directory(
     routes["/country/9/club"] = directory
     response = client.get("/clubs/?country_id=9")
     assert response.status_code == 502
-    assert response.json()["detail"] == "Unexpected upstream payload for /country/9/club"
+    assert response.json()["detail"] == "Upstream request failed"
+
+
+def test_upstream_failure_detail_is_generic_and_logged(
+    synthetic_client: tuple[TestClient, dict], caplog: pytest.LogCaptureFixture
+) -> None:
+    """502 responses do not carry upstream-derived detail; the original value stays in the server log."""
+    client, routes = synthetic_client
+    routes["/country/9/club"] = {"clubIds": "131"}
+
+    with caplog.at_level(logging.WARNING, logger="uvicorn.error"):
+        response = client.get("/clubs/?country_id=9")
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Upstream request failed"}
+    assert "Upstream request failed: Unexpected upstream payload for /country/9/club" in caplog.messages
 
 
 def test_country_listing_unknown_country(synthetic_client: tuple[TestClient, dict]) -> None:
