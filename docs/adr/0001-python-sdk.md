@@ -1,6 +1,6 @@
 # 1. Expose a Python SDK alongside the HTTP service
 
-Status: Proposed — 2026-10-12
+Status: Accepted — implemented in 5.0.0
 
 Implementation plan: [Python SDK](../plans/0001-python-sdk.md).
 

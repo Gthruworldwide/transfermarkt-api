@@ -4,8 +4,9 @@ An async Python SDK and RESTful API (FastAPI) for football data from [Transferma
 
 Since version 4.0.0, data comes from Transfermarkt's JSON API, the same API the website uses, instead of scraping HTML pages. Upstream requests can still be blocked or fail; the SDK and service distinguish these failures. See [CHANGELOG.md](CHANGELOG.md) for changes to the response format.
 
-Please note that the deployed application is used only for testing purposes and is rate limited to 2 requests
-every 3 seconds per client IP. If you'd like to customize it, consider hosting in your own cloud service.
+Please note that the hosted application is used only for testing purposes and is rate limited to 2 requests
+every 3 seconds per client IP. That limit is a deployment setting: self-hosted installs have rate limiting disabled
+by default (`RATE_LIMITING_ENABLE=false`). If you'd like to customize it, consider hosting in your own cloud service.
 
 The JSON API is internal to Transfermarkt and undocumented: it can change without notice. This project's MIT license covers its code, not the data; check [Transfermarkt's terms](https://www.transfermarkt.com/intern/) before using the data in your own services.
 

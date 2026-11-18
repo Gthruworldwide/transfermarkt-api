@@ -15,6 +15,8 @@ jobs:
     concurrency: deploy-group
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: superfly/flyctl-actions/setup-flyctl@98172f70657cb3e15db199af139be99bd3e61200 # pinned full commit SHA
       - run: flyctl deploy --remote-only
         env:

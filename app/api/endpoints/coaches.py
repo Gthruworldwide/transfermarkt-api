@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.dependencies import Tfmkt
-from app.api.params import PageNumber
+from app.api.params import EntityId, PageNumber
 from transfermarkt_api.schemas import coaches as schemas
 
 router = APIRouter()
@@ -14,6 +14,6 @@ async def search_coaches(coach_name: str, tfmkt: Tfmkt, page_number: PageNumber 
 
 
 @router.get("/{coach_id}/profile", response_model=schemas.CoachProfile)
-async def get_coach_profile(coach_id: str, tfmkt: Tfmkt) -> schemas.CoachProfile:
+async def get_coach_profile(coach_id: EntityId, tfmkt: Tfmkt) -> schemas.CoachProfile:
     """Get a coach's profile."""
     return await tfmkt.coach_profile(coach_id)

@@ -122,6 +122,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
@@ -162,3 +164,8 @@ cython_debug/
 
 # Vercel
 .vercel/
+
+# Local credentials and private keys
+credentials.json
+*.pem
+*.key
