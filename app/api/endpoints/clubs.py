@@ -3,7 +3,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import Tfmkt
-from app.api.params import PageNumber
+from app.api.params import EntityId, PageNumber, SeasonId
 from transfermarkt_api.schemas import clubs as schemas
 from transfermarkt_api.schemas.achievements import Achievements
 from transfermarkt_api.schemas.clubs.listing import ClubListing
@@ -24,18 +24,20 @@ async def search_clubs(club_name: str, tfmkt: Tfmkt, page_number: PageNumber = 1
 
 
 @router.get("/{club_id}/profile", response_model=schemas.ClubProfile)
-async def get_club_profile(club_id: str, tfmkt: Tfmkt) -> schemas.ClubProfile:
+async def get_club_profile(club_id: EntityId, tfmkt: Tfmkt) -> schemas.ClubProfile:
     """Get a club's profile."""
     return await tfmkt.club_profile(club_id)
 
 
 @router.get("/{club_id}/players", response_model=schemas.ClubPlayers)
-async def get_club_players(club_id: str, tfmkt: Tfmkt, season_id: Optional[str] = None) -> schemas.ClubPlayers:
+async def get_club_players(
+    club_id: EntityId, tfmkt: Tfmkt, season_id: Optional[SeasonId] = None
+) -> schemas.ClubPlayers:
     """Get a club's squad for a season (current squad by default)."""
     return await tfmkt.club_players(club_id, season_id=season_id)
 
 
 @router.get("/{club_id}/achievements")
-async def get_club_achievements(club_id: str, tfmkt: Tfmkt) -> Achievements:
+async def get_club_achievements(club_id: EntityId, tfmkt: Tfmkt) -> Achievements:
     """Get a club's titles by season."""
     return await tfmkt.club_achievements(club_id)

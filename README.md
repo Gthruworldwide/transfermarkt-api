@@ -4,8 +4,9 @@ An async Python SDK and RESTful API (FastAPI) for football data from [Transferma
 
 Since version 4.0.0, data comes from Transfermarkt's JSON API, the same API the website uses, instead of scraping HTML pages. Upstream requests can still be blocked or fail; the SDK and service distinguish these failures. See [CHANGELOG.md](CHANGELOG.md) for changes to the response format.
 
-Please note that the deployed application is used only for testing purposes and is rate limited to 2 requests
-every 3 seconds per client IP. If you'd like to customize it, consider hosting in your own cloud service.
+Please note that the hosted application is used only for testing purposes and is rate limited to 2 requests
+every 3 seconds per client IP. That limit is a deployment setting: self-hosted installs have rate limiting disabled
+by default (`RATE_LIMITING_ENABLE=false`). If you'd like to customize it, consider hosting in your own cloud service.
 
 The JSON API is internal to Transfermarkt and undocumented: it can change without notice. This project's MIT license covers its code, not the data; check [Transfermarkt's terms](https://www.transfermarkt.com/intern/) before using the data in your own services.
 
@@ -229,6 +230,7 @@ These settings configure the HTTP server and can be loaded from `.env`. SDK call
 |-------------------------------|--------------------------------------------------------------------------------------------------------|------------------------------------------|
 | `RATE_LIMITING_ENABLE`        | Enable rate limiting feature for API calls                                                             | `false`                                  |
 | `RATE_LIMITING_FREQUENCY`     | Requests allowed per client IP across all routes, in [limits notation](https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation) | `2/3seconds`                             |
+| `TRUST_PROXY_HEADERS`         | Trust `Fly-Client-IP` only behind a proxy that overwrites client-supplied copies                                               | `false`                                  |
 | `TFMKT_BASE_URL`              | Transfermarkt JSON API base URL                                                                        | Built-in upstream endpoint |
 | `TFMKT_TIMEOUT_SECONDS`       | Timeout for each upstream request                                                                      | `15`                                     |
 | `TFMKT_MAX_CONCURRENCY`       | Maximum concurrent upstream requests across the whole server                                          | `10`                                     |
@@ -237,7 +239,7 @@ These settings configure the HTTP server and can be loaded from `.env`. SDK call
 | `CACHE_MAX_ENTRIES`           | Maximum number of cached upstream responses                                                            | `2000`                                   |
 
 Rate limits apply to the API routes only: `/health`, the docs (`/`, `/docs`, `/redoc`) and `/openapi.json` are not
-counted. They are counted per client IP: the `Fly-Client-IP` header set by the Fly.io proxy, or the address of the
-connection when that header is missing. `X-Forwarded-For` is not trusted. Behind another reverse proxy, all
-requests share the proxy's address, and outside Fly.io clients can send `Fly-Client-IP` themselves, so adjust
-`client_ip` in `app/main.py` before enabling rate limiting on another host.
+counted. They are counted per client IP. The `Fly-Client-IP` header is trusted only when `TRUST_PROXY_HEADERS=true`
+and its value is a valid IP literal; otherwise the TCP peer address is used. `X-Forwarded-For` is never trusted.
+Enable `TRUST_PROXY_HEADERS` only behind a proxy that overwrites any client-supplied copy of `Fly-Client-IP` (Fly.io
+does). On any other host, leave it disabled: every request then shares the proxy's real address as one rate key.

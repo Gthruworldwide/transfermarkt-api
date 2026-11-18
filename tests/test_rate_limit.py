@@ -7,13 +7,23 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from app.main import app, client_ip, limiter
+from app.main import _log_safe, app, client_ip, limiter
+from app.settings import settings
 
 
 def request_with(headers: dict[str, str], client: tuple[str, int] = ("10.0.0.1", 1234)) -> Request:
     """A bare request from `client` carrying `headers`."""
     raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
     return Request({"type": "http", "method": "GET", "path": "/", "headers": raw, "client": client})
+
+
+@pytest.fixture(autouse=True)
+def trust_proxy_headers() -> Iterator[None]:
+    """Fly-style deployments opt in to proxy header trust for these tests."""
+    previous = settings.TRUST_PROXY_HEADERS
+    settings.TRUST_PROXY_HEADERS = True
+    yield
+    settings.TRUST_PROXY_HEADERS = previous
 
 
 def test_client_ip_prefers_fly_client_ip() -> None:
@@ -99,3 +109,49 @@ def test_access_log_includes_429(limited_client: TestClient, caplog: pytest.LogC
             limited_client.get(API_PATH, headers={"Fly-Client-IP": "203.0.113.7"})
 
     assert f'203.0.113.7 - "GET {API_PATH}" 429' in caplog.messages
+
+
+def test_fly_client_ip_is_ignored_by_default() -> None:
+    """Outside a trusted proxy, a client-supplied Fly-Client-IP cannot choose the rate key."""
+    settings.TRUST_PROXY_HEADERS = False
+    try:
+        assert client_ip(request_with({"Fly-Client-IP": "203.0.113.7"})) == "10.0.0.1"
+    finally:
+        settings.TRUST_PROXY_HEADERS = True
+
+
+def test_malformed_fly_client_ip_falls_back_to_peer() -> None:
+    """A non-IP or control-character proxy header cannot become a rate key or log field."""
+    assert client_ip(request_with({"Fly-Client-IP": "not-an-ip"})) == "10.0.0.1"
+    assert client_ip(request_with({"Fly-Client-IP": "203.0.113.7\n forged"})) == "10.0.0.1"
+
+
+def test_log_safe_escapes_control_characters() -> None:
+    """Caller data cannot inject a newline or carriage return into an access-log line."""
+    assert _log_safe("healthy\nforged\rline") == "healthy\\x0aforged\\x0dline"
+
+
+def test_long_rate_keys_are_normalized() -> None:
+    """Oversized caller keys are hashed to a bounded length before storage."""
+    assert len(limiter._normalize_key("a" * 5000)) == 64
+    assert limiter._normalize_key("203.0.113.7") == "203.0.113.7"
+
+
+def test_key_count_is_bounded_and_oldest_budget_evicted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unique keys cannot grow the counter store without bound; the least recently used budget is dropped."""
+    import app.rate_limit as rate_limit_module
+
+    monkeypatch.setattr(rate_limit_module, "_MAX_TRACKED_KEYS", 2)
+    bounded = rate_limit_module.RateLimiter("2/3seconds", enabled=True)
+    try:
+        assert bounded.hit("first")
+        assert bounded.hit("second")
+        assert len(bounded._keys) == 2
+
+        assert bounded.hit("third")
+        assert len(bounded._keys) == 2
+        assert "first" not in bounded._keys
+        assert bounded.hit("first")  # evicted key starts with a fresh budget
+        assert bounded.storage.events  # remaining counters are still tracked
+    finally:
+        bounded.reset()

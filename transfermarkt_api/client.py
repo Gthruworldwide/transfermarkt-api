@@ -130,6 +130,7 @@ class Transfermarkt:
 
     async def club_players(self, club_id: str, *, season_id: str | None = None) -> ClubPlayers:
         """Get the current or historical squad of a club."""
+        _season_id(season_id)
         return await self._call(ClubPlayers, club_players.get_club_players, club_id, season_id)
 
     async def club_achievements(self, club_id: str) -> Achievements:
@@ -224,3 +225,10 @@ class Transfermarkt:
 def _positive_integer(value: int, name: str) -> None:
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise ValueError(f"{name} must be a positive integer")
+
+
+def _season_id(value: str | None, name: str = "season_id") -> None:
+    if value is None:
+        return
+    if not isinstance(value, str) or not value.isascii() or not value.isdigit() or int(value) < 1:
+        raise ValueError(f"{name} must be a positive numeric string")

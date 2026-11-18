@@ -1,4 +1,6 @@
+import ipaddress
 import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,17 +17,33 @@ from transfermarkt_api.cache import CacheConfig
 from transfermarkt_api.exceptions import EndpointUnavailable, NotFound, UpstreamBlocked, UpstreamError, UpstreamTimeout
 
 access_log = logging.getLogger("uvicorn.error")
+_LOG_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _log_safe(value: str) -> str:
+    """Escape control characters so caller data cannot split or forge an access-log line."""
+    return _LOG_CONTROL_RE.sub(lambda match: f"\\x{ord(match.group()):02x}", value)
 
 
 def client_ip(request: Request) -> str:
     """
     Address of the client calling the API, the key for rate limiting.
 
-    On Fly.io, the proxy sets `Fly-Client-IP` to the address that connected to it, replacing any value sent by the
-    client. `X-Forwarded-For` is ignored because clients can prepend arbitrary addresses to it. Without that header,
-    the address of the TCP connection is used. Outside Fly.io, clients can set `Fly-Client-IP` themselves.
+    `Fly-Client-IP` is used only when `TRUST_PROXY_HEADERS` is enabled, which an operator should set only where a
+    trusted proxy overwrites any client-supplied copy of the header (Fly.io does). `X-Forwarded-For` is never trusted.
+    The header is accepted only as a valid IP literal, so malformed values fall back to the socket peer.
     """
-    return request.headers.get("Fly-Client-IP") or (request.client.host if request.client else "unknown")
+    peer = request.client.host if request.client else "unknown"
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded = request.headers.get("Fly-Client-IP")
+        if forwarded:
+            try:
+                ipaddress.ip_address(forwarded)
+            except ValueError:
+                pass
+            else:
+                return forwarded
+    return peer
 
 
 limiter = RateLimiter(settings.RATE_LIMITING_FREQUENCY, enabled=settings.RATE_LIMITING_ENABLE)
@@ -68,10 +86,14 @@ app.include_router(api_router)
 async def sdk_error_response(request: Request, error: Exception) -> JSONResponse:
     """Translate SDK failures into the existing HTTP error contract."""
     statuses = {NotFound: 404, UpstreamBlocked: 503, UpstreamTimeout: 504, UpstreamError: 502, EndpointUnavailable: 501}
-    return JSONResponse(
-        {"detail": str(error)},
-        status_code=next(status for error_type, status in statuses.items() if isinstance(error, error_type)),
-    )
+    status = next(status for error_type, status in statuses.items() if isinstance(error, error_type))
+    if isinstance(error, UpstreamError):
+        # Keep upstream-derived diagnostics server-side; the public 502 body stays fixed.
+        access_log.warning("Upstream request failed: %s", _log_safe(str(error)))
+        detail = "Upstream request failed"
+    else:
+        detail = str(error)
+    return JSONResponse({"detail": detail}, status_code=status)
 
 
 for error_type in (NotFound, UpstreamBlocked, UpstreamTimeout, UpstreamError, EndpointUnavailable):
@@ -102,8 +124,10 @@ async def log_request(request: Request, call_next: RequestResponseEndpoint) -> R
         status = response.status_code
         return response
     finally:
-        target = f"{request.url.path}?{request.url.query}" if request.url.query else request.url.path
-        access_log.info('%s - "%s %s" %d', client_ip(request), request.method, target, status)
+        target = _log_safe(request.url.path)
+        if request.url.query:
+            target = f"{target}?{_log_safe(request.url.query)}"
+        access_log.info('%s - "%s %s" %d', _log_safe(client_ip(request)), _log_safe(request.method), target, status)
 
 
 @app.get("/", include_in_schema=False)
@@ -119,4 +143,4 @@ def health() -> dict:
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000)

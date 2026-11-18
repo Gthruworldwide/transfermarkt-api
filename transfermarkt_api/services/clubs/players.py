@@ -3,6 +3,7 @@ from typing import Optional
 from transfermarkt_api.tfmkt import TfmktClient
 from transfermarkt_api.tfmkt.concurrency import gather
 from transfermarkt_api.tfmkt.reference import (
+    _int,
     current_assignment,
     date_of_birth,
     get_reference,
@@ -30,7 +31,7 @@ async def get_club_players(tfmkt: TfmktClient, club_id: str, season_id: Optional
         tfmkt.players(player_ids),
         gather(*(tfmkt.player_transfer_history(i) for i in player_ids)),
     )
-    max_season = int(season_id) if season_id and not is_current else None
+    max_season = _int(season_id) if season_id and not is_current else None
     arrivals = {i: latest_arrival(history, club_id, max_season) for i, history in zip(player_ids, histories)}
     assignments = {i: current_assignment(players.get(i, {})) for i in player_ids}
     squad_members = {str(member["playerId"]): member for member in members}

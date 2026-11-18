@@ -1,6 +1,8 @@
 """Behavior of the JSON-backed endpoints: recorded upstream data plus synthetic edge cases."""
 
+import asyncio
 import json
+import logging
 from collections.abc import Iterator
 from datetime import datetime
 
@@ -370,7 +372,22 @@ def test_country_listing_rejects_malformed_directory(
     routes["/country/9/club"] = directory
     response = client.get("/clubs/?country_id=9")
     assert response.status_code == 502
-    assert response.json()["detail"] == "Unexpected upstream payload for /country/9/club"
+    assert response.json()["detail"] == "Upstream request failed"
+
+
+def test_upstream_failure_detail_is_generic_and_logged(
+    synthetic_client: tuple[TestClient, dict], caplog: pytest.LogCaptureFixture
+) -> None:
+    """502 responses do not carry upstream-derived detail; the original value stays in the server log."""
+    client, routes = synthetic_client
+    routes["/country/9/club"] = {"clubIds": "131"}
+
+    with caplog.at_level(logging.WARNING, logger="uvicorn.error"):
+        response = client.get("/clubs/?country_id=9")
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "Upstream request failed"}
+    assert "Upstream request failed: Unexpected upstream payload for /country/9/club" in caplog.messages
 
 
 def test_country_listing_unknown_country(synthetic_client: tuple[TestClient, dict]) -> None:
@@ -450,6 +467,28 @@ def test_page_number_below_one_is_rejected(synthetic_client: tuple[TestClient, d
     client, _ = synthetic_client
 
     assert client.get(path).status_code == 422
+
+
+@pytest.mark.parametrize("season_id", ["not-a-year", "2024x", "-1", "20 24"])
+def test_non_numeric_season_id_is_rejected(synthetic_client: tuple[TestClient, dict], season_id: str) -> None:
+    """A non-numeric season_id is refused as 422 before it can reach a bare int() conversion."""
+    client, _ = synthetic_client
+
+    assert client.get("/clubs/1/players", params={"season_id": season_id}).status_code == 422
+
+
+def test_page_number_above_upper_bound_is_rejected(synthetic_client: tuple[TestClient, dict]) -> None:
+    """Absurdly deep pages are refused instead of being forwarded upstream."""
+    client, _ = synthetic_client
+
+    assert client.get("/players/search/x?page_number=10001").status_code == 422
+
+
+def test_sdk_rejects_non_numeric_season_id() -> None:
+    """The SDK facade validates season_id before any upstream call or int() conversion."""
+    transport = httpx.MockTransport(lambda request: ok({"squad": []}))
+    with pytest.raises(ValueError, match="positive numeric string"):
+        asyncio.run(Transfermarkt(transport=transport).club_players("1", season_id="not-a-year"))
 
 
 def test_current_squad_with_non_current_members(synthetic_client: tuple[TestClient, dict]) -> None:

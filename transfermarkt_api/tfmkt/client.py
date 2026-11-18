@@ -1,6 +1,7 @@
 """Async client for Transfermarkt's JSON API (tfmkt), the data source of every endpoint migrated off HTML scraping."""
 
 import asyncio
+import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any, Optional
@@ -14,6 +15,7 @@ from transfermarkt_api.tfmkt.concurrency import gather
 from transfermarkt_api.tfmkt.freshness import record_fetch
 
 BATCH_SIZE = 100  # batch routes accepted 200 IDs in testing; stay well below
+logger = logging.getLogger(__name__)
 
 
 class TfmktClient:
@@ -84,7 +86,8 @@ class TfmktClient:
             except httpx.HTTPError as e:
                 if self._transport_injected:
                     raise
-                raise UpstreamError(f"Upstream connection error for {path}: {e}", url=str(request.url)) from e
+                logger.warning("Upstream connection error for %s: %s", path, e)
+                raise UpstreamError(f"Upstream connection error for {path}", url=str(request.url)) from e
 
         data = self._parse(response, path)
         fetched_at = response.extensions.get("transfermarkt_fetched_at", datetime.now(UTC).replace(tzinfo=None))
